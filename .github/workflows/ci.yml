@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest          # x86-64: AVX2 kernels
+            native: ON
+          - os: ubuntu-latest          # portable C++ fallback, no SIMD
+            native: OFF
+          - os: macos-14               # Apple Silicon: NEON kernels
+            native: ON
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install the HuggingFace reference implementation
+        run: pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 && pip install transformers==4.46.3 safetensors numpy
+
+      - name: Download GPT-2 tokenizer files
+        run: |
+          mkdir -p models/test
+          curl -fL -o models/test/vocab.json https://huggingface.co/openai-community/gpt2/resolve/main/vocab.json
+          curl -fL -o models/test/merges.txt https://huggingface.co/openai-community/gpt2/resolve/main/merges.txt
+
+      - name: Build reference fixtures with HuggingFace
+        run: python tests/reference/make_reference.py --dir models/test
+
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMINIGPT_NATIVE=${{ matrix.native }}
+          cmake --build build -j 3
+
+      - name: Test against HuggingFace
+        run: ./build/minigpt-tests models/test
+
+      - name: Run the CLI
+        run: ./build/minigpt -m models/test -p "Hello" -n 8 --int8
+
+  sanitizers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 && pip install transformers==4.46.3 safetensors numpy
+      - run: |
+          mkdir -p models/test
+          curl -fL -o models/test/vocab.json https://huggingface.co/openai-community/gpt2/resolve/main/vocab.json
+          curl -fL -o models/test/merges.txt https://huggingface.co/openai-community/gpt2/resolve/main/merges.txt
+          python tests/reference/make_reference.py --dir models/test
+      - name: Build with AddressSanitizer + UBSan
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -O1"
+          cmake --build build -j 3
+      - run: ./build/minigpt-tests models/test
