@@ -15,13 +15,13 @@ jobs:
             native: ON
           - os: ubuntu-latest          # portable C++ fallback, no SIMD
             native: OFF
-          - os: macos-14               # Apple Silicon: NEON kernels
+          - os: macos-latest           # Apple Silicon: NEON kernels
             native: ON
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
@@ -51,8 +51,8 @@ jobs:
   sanitizers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1 && pip install transformers==4.46.3 safetensors numpy
