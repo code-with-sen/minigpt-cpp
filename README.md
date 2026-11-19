@@ -5,28 +5,46 @@
 ![Dependencies](https://img.shields.io/badge/dependencies-none-brightgreen)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-**GPT-2 inference from scratch in C++17**: tokenizer, transformer, sampling, KV cache, a thread pool and int8 SIMD kernels, in about 1,450 lines of C++ with no dependencies. It runs OpenAI's GPT-2 weights on a CPU, matches the official PyTorch implementation to within **5e-6**, and generates text **3.3× faster than PyTorch** on the same machine (1.5× faster at the same fp32 precision).
+**GPT-2 inference from scratch in C++17**: tokenizer, transformer, sampling, KV cache, a thread pool and int8 SIMD kernels, in about 1,450 lines of C++ with no dependencies. It runs OpenAI's GPT-2 weights on a CPU, matches the official PyTorch implementation to within **5e-6**, and generates text **3.3× faster than PyTorch** on the same machine (1.5× faster at the same fp32 precision). On an Apple Silicon MacBook Air it reaches **240 tokens/sec**.
 
-```bash
-sh scripts/download_model.sh                 # GPT-2 small from Hugging Face (~550 MB)
-./build/minigpt -p "The meaning of life is" -n 64 --int8
 ```
+$ ./minigpt -p "The future of AI is" -n 50 --int8
+loaded GPT-2: 12 layers, 12 heads, 768 dims, 143 MB of weights (int8), 8 threads (0.8s)
+The future of AI is being explored. But in the meantime, we can't say goodbye to people. The future of AI
+is being explored. But in the meantime, we can't say goodbye to people.
+
+What we have to do is identify the problem and address
+prompt: 5 tokens in 0.03s | generated: 50 tokens in 0.23s (221.1 tokens/s)
+```
+
+*Real output from OpenAI's GPT-2 (124M) on a MacBook Air. Repeating itself is typical of GPT-2 small with greedy-ish sampling; raise `-t` for more variety.*
 
 ## Results
 
-Greedy generation of 32 tokens after an 18-token prompt, with GPT-2 small's architecture (124M parameters), on a **2-core Intel Xeon cloud VM** (AVX2). Each row adds one optimization:
+Greedy generation of 32 tokens after an 18-token prompt. Each row adds one optimization.
+
+**Apple Silicon MacBook Air, 8 threads (NEON), real GPT-2 weights:**
 
 | Configuration | Tokens/sec | Speed-up | Weights in memory |
 |---|---:|---:|---:|
-| Baseline: 1 thread, no KV cache, fp32 | 1.2 | 1.0× | 498 MB |
-| + KV cache | 31.9 | 25.7× | 498 MB |
-| + multithreading (2 threads) | 49.6 | 39.9× | 498 MB |
-| + int8 weights (AVX2) | **109.1** | **87.9×** | **143 MB** |
-| *PyTorch 2.5 + HuggingFace `generate`, 2 threads, fp32* | *32.8* | | |
+| Baseline: 1 thread, no KV cache, fp32 | 2.3 | 1.0× | 498 MB |
+| + KV cache | 57.6 | 25.3× | 498 MB |
+| + multithreading (8 threads) | 99.1 | 43.5× | 498 MB |
+| + int8 weights (NEON) | **239.8** | **105.2×** | **143 MB** |
 
-- **int8 accuracy:** picks the same next token as fp32 at 98% of positions (49 of 50); largest logit difference 0.10.
+**2-core Intel Xeon cloud VM (AVX2)**, compared with PyTorch on the same machine. This run used a model with GPT-2 small's exact shape but random weights (the VM could not download the real ones), which takes exactly the same time per token:
+
+| Configuration | Tokens/sec | Speed-up |
+|---|---:|---:|
+| Baseline: 1 thread, no KV cache, fp32 | 1.2 | 1.0× |
+| + KV cache | 31.9 | 25.7× |
+| + multithreading (2 threads) | 49.6 | 39.9× |
+| + int8 weights (AVX2) | **109.1** | **87.9×** |
+| *PyTorch 2.5 + HuggingFace `generate`, 2 threads, fp32* | *32.8* | |
+
 - **KV cache and threads change nothing in the output:** logits are bit-identical with and without them.
-- Reproduce with `./build/minigpt-bench models/gpt2`. More cores help the multithreaded rows; the KV cache gain grows with sequence length.
+- **int8 is an accuracy trade-off.** With the real GPT-2 weights, int8 picks the same next token as fp32 at 84% of positions (42 of 50, each fed the same history). Most differences are where the top two words are almost tied. Use fp32 (no `--int8`) when exact output matters.
+- Reproduce with `./build/minigpt-bench models/gpt2`.
 
 ## Correctness
 
@@ -71,17 +89,23 @@ Design decisions and trade-offs are in **[docs/DESIGN.md](docs/DESIGN.md)**. The
 
 1. **KV cache.** Each layer keeps the keys and values of earlier tokens, so a new token costs one pass instead of reprocessing the whole sequence (**~26× faster** here).
 2. **Thread pool.** Matrix rows are split across persistent threads with no locking, since rows are independent.
-3. **int8, in blocks of 32 values with one scale each.** Generating text is limited by how fast weights stream from memory, and int8 moves 3.5× fewer bytes. The first version, left to the compiler, was *slower* than fp32. Hand-written AVX2 (`maddubs`/`madd`) and NEON (`vdotq_s32`) kernels made it **2.2× faster** than fp32.
+3. **int8, in blocks of 32 values with one scale each.** Generating text is limited by how fast weights stream from memory, and int8 moves 3.5× fewer bytes. The first version, left to the compiler, was *slower* than fp32. Hand-written AVX2 (`maddubs`/`madd`) and NEON (`vdotq_s32`) kernels made it **2.2–2.4× faster** than fp32.
 
 ## Build and run
 
-Needs CMake 3.16+ and a C++17 compiler (GCC or Clang; both are tested in CI). There are no other dependencies.
+Needs a C++17 compiler (GCC or Clang; both are tested in CI). There are no other dependencies.
 
 ```bash
 git clone https://github.com/code-with-sen/minigpt-cpp && cd minigpt-cpp
 cmake -S . -B build && cmake --build build -j
 sh scripts/download_model.sh                       # or: gpt2-medium, gpt2-large, gpt2-xl
 ./build/minigpt -p "Once upon a time" -n 100 --int8
+```
+
+No CMake? One command builds it (use `-march=native` instead of `-mcpu=apple-m1` on Intel/AMD):
+
+```bash
+clang++ -std=c++17 -O3 -mcpu=apple-m1 -Isrc src/main.cpp src/model.cpp src/tokenizer.cpp -o minigpt
 ```
 
 | Option | Meaning |
@@ -91,7 +115,7 @@ sh scripts/download_model.sh                       # or: gpt2-medium, gpt2-large
 | `-t, --temperature` | 0 = always the most likely token (default 0.8) |
 | `-k, --top-k` | Sample from the k most likely tokens (default 40) |
 | `-j, --threads` | CPU threads (default: all cores) |
-| `--int8` | 8-bit weights: ~3.5× less memory, ~2× faster |
+| `--int8` | 8-bit weights: ~3.5× less memory, 2–2.5× faster, slightly different output |
 | `--no-kv-cache` | Disable the cache, for comparison |
 
 ### Run the tests
