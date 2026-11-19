@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Downloads OpenAI's GPT-2 weights and tokenizer files from Hugging Face.
-#   ./scripts/download_model.sh            # gpt2 (124M parameters, ~550 MB)
-#   ./scripts/download_model.sh gpt2-medium # 355M; also gpt2-large, gpt2-xl
+#   sh scripts/download_model.sh            # gpt2 (124M parameters, ~550 MB)
+#   sh scripts/download_model.sh gpt2-medium # 355M; also gpt2-large, gpt2-xl
 set -eu
 NAME="${1:-gpt2}"
 DEST="models/${NAME}"
