@@ -8,7 +8,7 @@
 **GPT-2 inference from scratch in C++17**: tokenizer, transformer, sampling, KV cache, a thread pool and int8 SIMD kernels, in about 1,450 lines of C++ with no dependencies. It runs OpenAI's GPT-2 weights on a CPU, matches the official PyTorch implementation to within **5e-6**, and generates text **3.3× faster than PyTorch** on the same machine (1.5× faster at the same fp32 precision).
 
 ```bash
-./scripts/download_model.sh                 # GPT-2 small from Hugging Face (~550 MB)
+sh scripts/download_model.sh                 # GPT-2 small from Hugging Face (~550 MB)
 ./build/minigpt -p "The meaning of life is" -n 64 --int8
 ```
 
@@ -80,7 +80,7 @@ Needs CMake 3.16+ and a C++17 compiler (GCC or Clang; both are tested in CI). Th
 ```bash
 git clone https://github.com/code-with-sen/minigpt-cpp && cd minigpt-cpp
 cmake -S . -B build && cmake --build build -j
-./scripts/download_model.sh                       # or: gpt2-medium, gpt2-large, gpt2-xl
+sh scripts/download_model.sh                       # or: gpt2-medium, gpt2-large, gpt2-xl
 ./build/minigpt -p "Once upon a time" -n 100 --int8
 ```
 
