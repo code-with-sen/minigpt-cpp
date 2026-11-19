@@ -1,0 +1,5 @@
+# Tell GitHub's language counter what this repo is written in.
+*.cpp linguist-language=C++
+*.hpp linguist-language=C++
+# The build file is configuration, not source code.
+CMakeLists.txt linguist-detectable=false
