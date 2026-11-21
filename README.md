@@ -7,6 +7,8 @@
 
 **GPT-2 inference from scratch in C++17**: tokenizer, transformer, sampling, KV cache, a thread pool and int8 SIMD kernels, in about 1,450 lines of C++ with no dependencies. It runs OpenAI's GPT-2 weights on a CPU, matches the official PyTorch implementation to within **5e-6**, and generates text **3.3× faster than PyTorch** on the same machine (1.5× faster at the same fp32 precision). On an Apple Silicon MacBook Air it reaches **240 tokens/sec**.
 
+![minigpt-cpp demo: naive vs optimized GPT-2 inference, and the speed-up from each optimization](docs/demo.gif)
+
 ```
 $ ./minigpt -p "The future of AI is" -n 50 --int8
 loaded GPT-2: 12 layers, 12 heads, 768 dims, 143 MB of weights (int8), 8 threads (0.8s)
